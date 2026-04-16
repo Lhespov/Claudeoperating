@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#1a1a2e"/>
+  <!-- Snake body segments -->
+  <rect x="80" y="220" width="60" height="60" rx="12" fill="#2a9d7a"/>
+  <rect x="150" y="220" width="60" height="60" rx="12" fill="#32b589"/>
+  <rect x="220" y="220" width="60" height="60" rx="12" fill="#3acc99"/>
+  <rect x="220" y="150" width="60" height="60" rx="12" fill="#3acc99"/>
+  <rect x="290" y="150" width="60" height="60" rx="12" fill="#3acc99"/>
+  <rect x="290" y="220" width="60" height="60" rx="12" fill="#3acc99"/>
+  <rect x="290" y="290" width="60" height="60" rx="12" fill="#3acc99"/>
+  <!-- Snake head -->
+  <rect x="360" y="290" width="72" height="72" rx="16" fill="#4ecca3"/>
+  <!-- Eyes -->
+  <circle cx="385" cy="315" r="8" fill="#1a1a2e"/>
+  <circle cx="413" cy="315" r="8" fill="#1a1a2e"/>
+  <circle cx="387" cy="313" r="3" fill="white"/>
+  <circle cx="415" cy="313" r="3" fill="white"/>
+  <!-- Food -->
+  <circle cx="160" cy="350" r="28" fill="#ff6b6b"/>
+  <circle cx="148" cy="338" r="6" fill="rgba(255,255,255,0.3)"/>
+</svg>
