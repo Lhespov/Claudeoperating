@@ -43,21 +43,27 @@
       color: #4ecca3;
     }
     #pauseBtn {
-      background: rgba(78, 204, 163, 0.12);
-      color: #4ecca3;
+      position: fixed;
+      top: calc(env(safe-area-inset-top, 0px) + 16px);
+      right: calc(env(safe-area-inset-right, 0px) + 18px);
+      background: none;
       border: none;
-      width: 38px;
-      height: 38px;
-      border-radius: 50%;
-      font-size: 16px;
+      padding: 6px;
       cursor: pointer;
       display: none;
-      align-items: center;
-      justify-content: center;
+      z-index: 11;
+      line-height: 0;
       -webkit-tap-highlight-color: transparent;
       touch-action: manipulation;
     }
-    #pauseBtn:active { transform: scale(0.92); }
+    #pauseBtn svg {
+      width: 26px;
+      height: 26px;
+      display: block;
+      fill: #4ecca3;
+      filter: drop-shadow(0 0 4px #4ecca3) drop-shadow(0 0 9px rgba(78, 204, 163, 0.65));
+    }
+    #pauseBtn:active { transform: scale(0.9); }
     canvas {
       border-radius: 16px;
       display: block;
@@ -137,9 +143,9 @@
 <body>
   <div id="topbar">
     <div id="score">SCORE: 0</div>
-    <button id="pauseBtn" aria-label="Pause">⏸</button>
   </div>
   <canvas id="game"></canvas>
+  <button id="pauseBtn" aria-label="Pause"></button>
 
   <div id="overlay"></div>
 
@@ -154,6 +160,15 @@
     let cols, rows, score, snake, dir, nextDir, food, gameLoop, running, paused;
     let walls = new Set();      // obstacle cells, keyed "x,y"
     let selectedMap = 0;
+
+    // Neon pause (two bars) / play (triangle) glyphs for the corner button.
+    const ICON_PAUSE = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4.5" height="16" rx="1.6"/><rect x="13.5" y="4" width="4.5" height="16" rx="1.6"/></svg>';
+    const ICON_PLAY = '<svg viewBox="0 0 24 24"><path d="M7 4.5 L19.5 12 L7 19.5 Z"/></svg>';
+
+    // High score persisted across sessions.
+    function getHighScore() { try { return Number(localStorage.getItem('snakeHighScore')) || 0; } catch (e) { return 0; } }
+    function saveHighScore(v) { try { localStorage.setItem('snakeHighScore', String(v)); } catch (e) {} }
+    let highScore = getHighScore();
 
     // ── Maps ─────────────────────────────────────────────────────────────
     // Each map's build(cols, rows) returns an array of {x, y} obstacle cells.
@@ -238,8 +253,8 @@
 
     function startGame() {
       overlay.style.display = 'none';
-      pauseBtn.style.display = 'flex';
-      pauseBtn.textContent = '⏸';
+      pauseBtn.style.display = 'block';
+      pauseBtn.innerHTML = ICON_PAUSE;
       running = true;
       paused = false;
       score = 0;
@@ -365,10 +380,9 @@
          </div>`).join('');
       overlay.innerHTML = `
         <div class="emoji">🐍</div>
-        <h2>Choose a map</h2>
         <div class="maps">${chips}</div>
         <button class="btn" id="startBtn">START GAME</button>
-        <p class="hint">Swipe or use arrow keys • walls wrap around</p>
+        ${highScore ? `<div class="label">Best ${highScore}</div>` : ''}
       `;
       overlay.querySelectorAll('.map-chip').forEach(chip => {
         chip.addEventListener('click', () => {
@@ -380,21 +394,20 @@
       document.getElementById('startBtn').addEventListener('click', startGame);
     }
 
-    function togglePause() {
-      if (!running) return;
-      paused = !paused;
-      pauseBtn.textContent = paused ? '▶' : '⏸';
+    function setPaused(state) {
+      if (!running || paused === state) return;
+      paused = state;
+      pauseBtn.innerHTML = paused ? ICON_PLAY : ICON_PAUSE;
       if (paused) {
         overlay.style.display = 'flex';
         overlay.innerHTML = `
-          <div class="emoji">⏸️</div>
           <div class="label">Paused</div>
           <div class="final-score">${score}</div>
           <div class="label">Score</div>
           <button class="btn" id="resumeBtn">RESUME</button>
           <button class="btn ghost" id="menuBtn">MAIN MENU</button>
         `;
-        document.getElementById('resumeBtn').addEventListener('click', togglePause);
+        document.getElementById('resumeBtn').addEventListener('click', () => setPaused(false));
         document.getElementById('menuBtn').addEventListener('click', showMenu);
       } else {
         overlay.style.display = 'none';
@@ -402,17 +415,21 @@
       }
     }
 
+    function togglePause() { if (running) setPaused(!paused); }
+
     function gameOver() {
       clearInterval(gameLoop);
       running = false;
       paused = false;
       pauseBtn.style.display = 'none';
+      const isRecord = score > highScore;
+      if (isRecord) { highScore = score; saveHighScore(highScore); }
       overlay.style.display = 'flex';
       overlay.innerHTML = `
-        <div class="emoji">💀</div>
-        <div class="label">Game Over</div>
+        <div class="emoji">${isRecord ? '🏆' : '💀'}</div>
+        <div class="label">${isRecord ? 'New Best' : 'Game Over'}</div>
         <div class="final-score">${score}</div>
-        <div class="label">Score</div>
+        <div class="label">Best ${highScore}</div>
         <button class="btn" id="againBtn">PLAY AGAIN</button>
         <button class="btn ghost" id="menuBtn">MAIN MENU</button>
       `;
@@ -460,6 +477,11 @@
     });
 
     window.addEventListener('resize', () => { resize(); if (running && !paused) draw(); });
+
+    // Auto-pause when the app is backgrounded, hidden, or closed.
+    document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });
+    window.addEventListener('blur', () => setPaused(true));
+    window.addEventListener('pagehide', () => setPaused(true));
 
     resize();
     showMenu();
