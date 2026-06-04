@@ -1,4 +1,4 @@
-const CACHE = 'snake-v1';
+const CACHE = 'snake-v2';
 const FILES = [
   './index.html',
   './manifest.json',

@@ -29,13 +29,35 @@
       user-select: none;
       -webkit-user-select: none;
     }
+    #topbar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
     #score {
       font-size: 22px;
       font-weight: 700;
       letter-spacing: 3px;
-      margin-bottom: 14px;
       color: #4ecca3;
     }
+    #pauseBtn {
+      background: rgba(78, 204, 163, 0.12);
+      color: #4ecca3;
+      border: none;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      font-size: 16px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    #pauseBtn:active { transform: scale(0.92); }
     canvas {
       border-radius: 16px;
       display: block;
@@ -51,6 +73,8 @@
       justify-content: center;
       gap: 12px;
       z-index: 10;
+      padding: 20px;
+      text-align: center;
     }
     #overlay .emoji { font-size: 64px; }
     #overlay h2 { font-size: 20px; color: #aaa; font-weight: 400; }
@@ -71,28 +95,123 @@
       touch-action: manipulation;
     }
     .btn:active { transform: scale(0.96); }
+    .btn.ghost {
+      background: transparent;
+      color: #4ecca3;
+      box-shadow: inset 0 0 0 2px rgba(78, 204, 163, 0.5);
+      padding: 12px 36px;
+      font-size: 15px;
+      margin-top: 4px;
+    }
     .hint { font-size: 13px; color: #555; margin-top: 4px; }
+    .maps {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      max-width: 320px;
+      margin-top: 6px;
+    }
+    .map-chip {
+      background: rgba(255, 255, 255, 0.04);
+      color: #aaa;
+      border: 2px solid transparent;
+      border-radius: 14px;
+      padding: 10px 8px;
+      width: 92px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      transition: border-color .15s, color .15s, background .15s;
+    }
+    .map-chip .map-emoji { font-size: 26px; display: block; margin-bottom: 4px; }
+    .map-chip .map-name { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; }
+    .map-chip.selected {
+      border-color: #4ecca3;
+      color: #4ecca3;
+      background: rgba(78, 204, 163, 0.1);
+    }
+    .map-chip:active { transform: scale(0.95); }
   </style>
 </head>
 <body>
-  <div id="score">SCORE: 0</div>
+  <div id="topbar">
+    <div id="score">SCORE: 0</div>
+    <button id="pauseBtn" aria-label="Pause">⏸</button>
+  </div>
   <canvas id="game"></canvas>
 
-  <div id="overlay">
-    <div class="emoji">🐍</div>
-    <h2>Swipe to move</h2>
-    <button class="btn" id="startBtn">START GAME</button>
-    <p class="hint">Add to Home Screen for full-screen mode</p>
-  </div>
+  <div id="overlay"></div>
 
   <script>
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
     const scoreEl = document.getElementById('score');
     const overlay = document.getElementById('overlay');
+    const pauseBtn = document.getElementById('pauseBtn');
 
     const CELL = 20;
-    let cols, rows, score, snake, dir, nextDir, food, gameLoop, running;
+    let cols, rows, score, snake, dir, nextDir, food, gameLoop, running, paused;
+    let walls = new Set();      // obstacle cells, keyed "x,y"
+    let selectedMap = 0;
+
+    // ── Maps ─────────────────────────────────────────────────────────────
+    // Each map's build(cols, rows) returns an array of {x, y} obstacle cells.
+    // Outer edges always wrap (Nokia style); only these inner walls are deadly.
+    const MAPS = [
+      { name: 'Classic', emoji: '🟢', build: () => [] },
+      {
+        name: 'Pillars', emoji: '🔵',
+        build: (c, r) => {
+          const cells = [];
+          for (let x = 3; x < c - 1; x += 4)
+            for (let y = 3; y < r - 1; y += 4) cells.push({ x, y });
+          return cells;
+        }
+      },
+      {
+        name: 'Tunnel', emoji: '🚇',
+        build: (c, r) => {
+          const cells = [];
+          const gap = Math.max(2, Math.floor(r / 5));
+          const top = Math.floor(r / 2) - gap, bot = Math.floor(r / 2) + gap;
+          [Math.floor(c / 4), Math.floor((3 * c) / 4)].forEach(x => {
+            for (let y = 0; y < r; y++) if (y < top || y > bot) cells.push({ x, y });
+          });
+          return cells;
+        }
+      },
+      {
+        name: 'Corners', emoji: '📐',
+        build: (c, r) => {
+          const cells = [];
+          const len = Math.max(2, Math.floor(Math.min(c, r) / 4));
+          const m = 2; // margin from edge
+          const corners = [[m, m, 1, 1], [c - 1 - m, m, -1, 1], [m, r - 1 - m, 1, -1], [c - 1 - m, r - 1 - m, -1, -1]];
+          corners.forEach(([sx, sy, dx, dy]) => {
+            for (let i = 0; i < len; i++) { cells.push({ x: sx + i * dx, y: sy }); cells.push({ x: sx, y: sy + i * dy }); }
+          });
+          return cells;
+        }
+      },
+      {
+        name: 'Maze', emoji: '🧩',
+        build: (c, r) => {
+          const cells = [];
+          const len = Math.max(3, Math.floor(c / 3));
+          const x0 = Math.floor((c - len) / 2);
+          [Math.floor(r / 4), Math.floor((3 * r) / 4)].forEach(y => {
+            for (let i = 0; i < len; i++) cells.push({ x: x0 + i, y });
+          });
+          const vlen = Math.max(2, Math.floor(r / 5));
+          for (let i = 0; i < vlen; i++) {
+            cells.push({ x: Math.floor(c / 4), y: Math.floor(r / 2) - Math.floor(vlen / 2) + i });
+            cells.push({ x: Math.floor((3 * c) / 4), y: Math.floor(r / 2) - Math.floor(vlen / 2) + i });
+          }
+          return cells;
+        }
+      }
+    ];
 
     function resize() {
       const maxW = window.innerWidth - 32;
@@ -105,12 +224,28 @@
       rows = canvas.height / CELL;
     }
 
+    function buildWalls() {
+      walls = new Set();
+      const cy = Math.floor(rows / 2);
+      const cx = Math.floor(cols / 2);
+      MAPS[selectedMap].build(cols, rows).forEach(w => {
+        if (w.x < 0 || w.x >= cols || w.y < 0 || w.y >= rows) return;
+        // Keep the snake's starting corridor (center row) clear so it can spawn safely.
+        if (w.y === cy && w.x >= cx - 4 && w.x <= cx + 1) return;
+        walls.add(w.x + ',' + w.y);
+      });
+    }
+
     function startGame() {
       overlay.style.display = 'none';
+      pauseBtn.style.display = 'flex';
+      pauseBtn.textContent = '⏸';
       running = true;
+      paused = false;
       score = 0;
       scoreEl.textContent = 'SCORE: 0';
       resize();
+      buildWalls();
       const cx = Math.floor(cols / 2);
       const cy = Math.floor(rows / 2);
       snake = [{ x: cx, y: cy }, { x: cx - 1, y: cy }, { x: cx - 2, y: cy }];
@@ -126,20 +261,21 @@
       let pos;
       do {
         pos = { x: Math.floor(Math.random() * cols), y: Math.floor(Math.random() * rows) };
-      } while (snake.some(s => s.x === pos.x && s.y === pos.y));
+      } while (snake.some(s => s.x === pos.x && s.y === pos.y) || walls.has(pos.x + ',' + pos.y));
       food = pos;
     }
 
     function tick() {
+      if (paused) return;
       dir = { ...nextDir };
-      const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+      // Nokia-style wrap: walk off one edge, reappear on the opposite side.
+      const head = {
+        x: (snake[0].x + dir.x + cols) % cols,
+        y: (snake[0].y + dir.y + rows) % rows
+      };
 
-      if (head.x < 0 || head.x >= cols || head.y < 0 || head.y >= rows) {
-        return gameOver();
-      }
-      if (snake.some(s => s.x === head.x && s.y === head.y)) {
-        return gameOver();
-      }
+      if (walls.has(head.x + ',' + head.y)) return gameOver();
+      if (snake.some(s => s.x === head.x && s.y === head.y)) return gameOver();
 
       snake.unshift(head);
 
@@ -168,6 +304,13 @@
       for (let y = 0; y <= rows; y++) {
         ctx.beginPath(); ctx.moveTo(0, y * CELL); ctx.lineTo(canvas.width, y * CELL); ctx.stroke();
       }
+
+      // Obstacles
+      ctx.fillStyle = '#533483';
+      walls.forEach(key => {
+        const [x, y] = key.split(',').map(Number);
+        roundRect(x * CELL + 2, y * CELL + 2, CELL - 4, CELL - 4, 4);
+      });
 
       ctx.fillStyle = '#ff6b6b';
       ctx.shadowColor = '#ff6b6b';
@@ -208,31 +351,89 @@
       ctx.fill();
     }
 
+    // ── Overlay screens ──────────────────────────────────────────────────
+    function showMenu() {
+      running = false;
+      paused = false;
+      clearInterval(gameLoop);
+      pauseBtn.style.display = 'none';
+      overlay.style.display = 'flex';
+      const chips = MAPS.map((m, i) =>
+        `<div class="map-chip${i === selectedMap ? ' selected' : ''}" data-map="${i}">
+           <span class="map-emoji">${m.emoji}</span>
+           <span class="map-name">${m.name}</span>
+         </div>`).join('');
+      overlay.innerHTML = `
+        <div class="emoji">🐍</div>
+        <h2>Choose a map</h2>
+        <div class="maps">${chips}</div>
+        <button class="btn" id="startBtn">START GAME</button>
+        <p class="hint">Swipe or use arrow keys • walls wrap around</p>
+      `;
+      overlay.querySelectorAll('.map-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          selectedMap = Number(chip.dataset.map);
+          overlay.querySelectorAll('.map-chip').forEach(c => c.classList.remove('selected'));
+          chip.classList.add('selected');
+        });
+      });
+      document.getElementById('startBtn').addEventListener('click', startGame);
+    }
+
+    function togglePause() {
+      if (!running) return;
+      paused = !paused;
+      pauseBtn.textContent = paused ? '▶' : '⏸';
+      if (paused) {
+        overlay.style.display = 'flex';
+        overlay.innerHTML = `
+          <div class="emoji">⏸️</div>
+          <div class="label">Paused</div>
+          <div class="final-score">${score}</div>
+          <div class="label">Score</div>
+          <button class="btn" id="resumeBtn">RESUME</button>
+          <button class="btn ghost" id="menuBtn">MAIN MENU</button>
+        `;
+        document.getElementById('resumeBtn').addEventListener('click', togglePause);
+        document.getElementById('menuBtn').addEventListener('click', showMenu);
+      } else {
+        overlay.style.display = 'none';
+        draw();
+      }
+    }
+
     function gameOver() {
       clearInterval(gameLoop);
       running = false;
+      paused = false;
+      pauseBtn.style.display = 'none';
       overlay.style.display = 'flex';
       overlay.innerHTML = `
         <div class="emoji">💀</div>
         <div class="label">Game Over</div>
         <div class="final-score">${score}</div>
         <div class="label">Score</div>
-        <button class="btn" onclick="startGame()">PLAY AGAIN</button>
+        <button class="btn" id="againBtn">PLAY AGAIN</button>
+        <button class="btn ghost" id="menuBtn">MAIN MENU</button>
       `;
+      document.getElementById('againBtn').addEventListener('click', startGame);
+      document.getElementById('menuBtn').addEventListener('click', showMenu);
     }
+
+    pauseBtn.addEventListener('click', togglePause);
 
     // Swipe detection — don't interfere with button taps
     let touchStart = null;
     const MIN_SWIPE = 20;
 
     document.addEventListener('touchstart', e => {
-      if (e.target.closest('button')) return;
+      if (e.target.closest('button') || e.target.closest('.map-chip')) return;
       e.preventDefault();
       touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     }, { passive: false });
 
     document.addEventListener('touchend', e => {
-      if (!touchStart || !running) return;
+      if (!touchStart || !running || paused) return;
       const dx = e.changedTouches[0].clientX - touchStart.x;
       const dy = e.changedTouches[0].clientY - touchStart.y;
       const absDx = Math.abs(dx);
@@ -251,17 +452,17 @@
     }, { passive: true });
 
     document.addEventListener('keydown', e => {
-      if (!running) return;
+      if (e.key === ' ' || e.key.toLowerCase() === 'p') { e.preventDefault(); togglePause(); return; }
+      if (!running || paused) return;
       const map = { ArrowRight: {x:1,y:0}, ArrowLeft: {x:-1,y:0}, ArrowDown: {x:0,y:1}, ArrowUp: {x:0,y:-1} };
       const d = map[e.key];
       if (d && (d.x !== -dir.x || d.y !== -dir.y)) nextDir = d;
     });
 
-    document.getElementById('startBtn').addEventListener('click', startGame);
-
-    window.addEventListener('resize', () => { resize(); });
+    window.addEventListener('resize', () => { resize(); if (running && !paused) draw(); });
 
     resize();
+    showMenu();
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
