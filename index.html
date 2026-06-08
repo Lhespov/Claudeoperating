@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Snake">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <title>Snake</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      position: fixed; overflow: hidden;
+    }
+    body {
+      background: #1a1a2e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      color: white;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* HUD */
+    #hud {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 0 16px;
+      margin-bottom: 10px;
+    }
+    #score {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #4ecca3;
+    }
+    #pauseBtn {
+      background: rgba(255,255,255,0.1);
+      border: none;
+      color: white;
+      font-size: 20px;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      cursor: pointer;
+      touch-action: manipulation;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    #pauseBtn.visible { display: flex; }
+
+    canvas {
+      border-radius: 12px;
+      display: block;
+      box-shadow: 0 0 30px rgba(78,204,163,0.15);
+    }
+
+    /* Screens */
+    .screen {
+      position: fixed; inset: 0;
+      background: #1a1a2e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      z-index: 10;
+    }
+    .screen.hidden { display: none; }
+
+    /* Main menu */
+    #menuScreen .title {
+      font-size: 48px;
+      font-weight: 900;
+      letter-spacing: 4px;
+      color: #4ecca3;
+      margin-bottom: 4px;
+    }
+    #menuScreen .subtitle {
+      font-size: 13px;
+      color: #444;
+      letter-spacing: 3px;
+      margin-bottom: 36px;
+    }
+    .map-label {
+      font-size: 11px;
+      color: #555;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .map-cards {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 32px;
+    }
+    .map-card {
+      width: 80px; height: 80px;
+      border-radius: 12px;
+      border: 2px solid #333;
+      background: #16213e;
+      cursor: pointer;
+      touch-action: manipulation;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: border-color 0.15s, transform 0.15s;
+    }
+    .map-card.selected {
+      border-color: #4ecca3;
+      box-shadow: 0 0 16px rgba(78,204,163,0.3);
+    }
+    .map-card:active { transform: scale(0.95); }
+    .map-card .map-icon { font-size: 26px; }
+    .map-card .map-name { font-size: 10px; color: #aaa; letter-spacing: 1px; }
+    .map-card.selected .map-name { color: #4ecca3; }
+
+    .btn {
+      background: #4ecca3;
+      color: #1a1a2e;
+      border: none;
+      padding: 16px 56px;
+      font-size: 18px;
+      font-weight: 700;
+      border-radius: 50px;
+      cursor: pointer;
+      letter-spacing: 1px;
+      touch-action: manipulation;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn.ghost {
+      background: transparent;
+      color: #4ecca3;
+      border: 2px solid #4ecca3;
+      padding: 12px 40px;
+      font-size: 15px;
+    }
+
+    /* Pause screen */
+    #pauseScreen .big { font-size: 42px; font-weight: 900; letter-spacing: 4px; margin-bottom: 8px; }
+    #pauseScreen .pscore { font-size: 18px; color: #555; margin-bottom: 36px; }
+    #pauseScreen { gap: 12px; }
+
+    /* Game over */
+    #gameoverScreen { gap: 8px; }
+    #gameoverScreen .emoji { font-size: 56px; margin-bottom: 4px; }
+    #gameoverScreen .go-label { font-size: 12px; color: #555; letter-spacing: 3px; }
+    #gameoverScreen .go-score { font-size: 48px; font-weight: 900; color: #4ecca3; }
+    #gameoverScreen .go-map { font-size: 13px; color: #444; margin-bottom: 20px; }
+    #gameoverScreen { gap: 6px; }
+  </style>
+</head>
+<body>
+
+  <!-- MAIN MENU -->
+  <div class="screen" id="menuScreen">
+    <div class="title">SNAKE</div>
+    <div class="subtitle">SWIPE TO MOVE</div>
+    <div class="map-label">Choose Map</div>
+    <div class="map-cards">
+      <div class="map-card selected" data-map="classic">
+        <div class="map-icon">🟩</div>
+        <div class="map-name">CLASSIC</div>
+      </div>
+      <div class="map-card" data-map="maze">
+        <div class="map-icon">🧱</div>
+        <div class="map-name">MAZE</div>
+      </div>
+      <div class="map-card" data-map="cross">
+        <div class="map-icon">➕</div>
+        <div class="map-name">CROSS</div>
+      </div>
+      <div class="map-card" data-map="ring">
+        <div class="map-icon">⭕</div>
+        <div class="map-name">RING</div>
+      </div>
+    </div>
+    <button class="btn" id="playBtn">PLAY</button>
+  </div>
+
+  <!-- PAUSE SCREEN -->
+  <div class="screen hidden" id="pauseScreen">
+    <div class="big">PAUSED</div>
+    <div class="pscore" id="pauseScore">SCORE: 0</div>
+    <button class="btn" id="resumeBtn">RESUME</button>
+    <button class="btn ghost" id="quitBtn" style="margin-top:6px">QUIT</button>
+  </div>
+
+  <!-- GAME OVER SCREEN -->
+  <div class="screen hidden" id="gameoverScreen">
+    <div class="emoji">💀</div>
+    <div class="go-label">GAME OVER</div>
+    <div class="go-score" id="goScore">0</div>
+    <div class="go-label">SCORE</div>
+    <div class="go-map" id="goMap"></div>
+    <button class="btn" id="retryBtn" style="margin-top:16px">PLAY AGAIN</button>
+    <button class="btn ghost" id="menuBtn" style="margin-top:8px">MENU</button>
+  </div>
+
+  <!-- GAME HUD + CANVAS -->
+  <div id="hud">
+    <div id="score">SCORE: 0</div>
+    <button id="pauseBtn">⏸</button>
+  </div>
+  <canvas id="game"></canvas>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const pauseBtn = document.getElementById('pauseBtn');
+
+    const menuScreen = document.getElementById('menuScreen');
+    const pauseScreen = document.getElementById('pauseScreen');
+    const gameoverScreen = document.getElementById('gameoverScreen');
+
+    const CELL = 20;
+    let cols, rows, score, snake, dir, nextDir, food, walls, gameLoop, running, paused;
+    let selectedMap = 'classic';
+    let currentMap = 'classic';
+
+    // ── MAP DEFINITIONS ─────────────────────────────────────────────
+    // Each map returns a set of wall {x,y} positions given cols/rows
+    const MAPS = {
+      classic: { name: 'Classic', buildWalls: () => [] },
+      maze: {
+        name: 'Maze',
+        buildWalls: (c, r) => {
+          const w = [];
+          // horizontal bars
+          const midR = Math.floor(r / 2);
+          for (let x = 2; x < Math.floor(c * 0.6); x++) w.push({ x, y: midR - 3 });
+          for (let x = Math.floor(c * 0.4); x < c - 2; x++) w.push({ x, y: midR + 3 });
+          // vertical bars
+          const midC = Math.floor(c / 2);
+          for (let y = 2; y < midR - 3; y++) w.push({ x: midC, y });
+          for (let y = midR + 3; y < r - 2; y++) w.push({ x: midC, y });
+          return w;
+        }
+      },
+      cross: {
+        name: 'Cross',
+        buildWalls: (c, r) => {
+          const w = [];
+          const midC = Math.floor(c / 2), midR = Math.floor(r / 2);
+          const arm = 3;
+          // four corner blocks
+          for (let x = arm; x < midC - arm; x++) {
+            for (let y = arm; y < midR - arm; y++) w.push({ x, y });
+          }
+          for (let x = midC + arm + 1; x < c - arm; x++) {
+            for (let y = arm; y < midR - arm; y++) w.push({ x, y });
+          }
+          for (let x = arm; x < midC - arm; x++) {
+            for (let y = midR + arm + 1; y < r - arm; y++) w.push({ x, y });
+          }
+          for (let x = midC + arm + 1; x < c - arm; x++) {
+            for (let y = midR + arm + 1; y < r - arm; y++) w.push({ x, y });
+          }
+          return w;
+        }
+      },
+      ring: {
+        name: 'Ring',
+        buildWalls: (c, r) => {
+          const w = [];
+          const cx = c / 2, cy = r / 2;
+          const outerR = Math.floor(Math.min(c, r) / 2) - 2;
+          const innerR = Math.floor(outerR * 0.45);
+          for (let x = 0; x < c; x++) {
+            for (let y = 0; y < r; y++) {
+              const dist = Math.sqrt((x - cx + 0.5) ** 2 + (y - cy + 0.5) ** 2);
+              if (dist > outerR || dist < innerR) w.push({ x, y });
+            }
+          }
+          return w;
+        }
+      }
+    };
+
+    function resize() {
+      const maxW = window.innerWidth - 32;
+      const maxH = window.innerHeight - 110;
+      const size = Math.max(Math.min(maxW, maxH), CELL);
+      const grid = Math.floor(size / CELL) * CELL;
+      canvas.width = grid;
+      canvas.height = grid;
+      cols = canvas.width / CELL;
+      rows = canvas.height / CELL;
+    }
+
+    function startGame(mapId) {
+      currentMap = mapId || selectedMap;
+      menuScreen.classList.add('hidden');
+      gameoverScreen.classList.add('hidden');
+      pauseScreen.classList.add('hidden');
+      pauseBtn.classList.add('visible');
+
+      running = true;
+      paused = false;
+      score = 0;
+      scoreEl.textContent = 'SCORE: 0';
+      pauseBtn.textContent = '⏸';
+
+      resize();
+      walls = new Set(MAPS[currentMap].buildWalls(cols, rows).map(p => key(p.x, p.y)));
+
+      const cx = Math.floor(cols / 2);
+      const cy = Math.floor(rows / 2);
+      snake = [{ x: cx, y: cy }, { x: cx - 1, y: cy }, { x: cx - 2, y: cy }];
+      dir = { x: 1, y: 0 };
+      nextDir = { x: 1, y: 0 };
+      spawnFood();
+      clearInterval(gameLoop);
+      gameLoop = setInterval(tick, 130);
+      draw();
+    }
+
+    function key(x, y) { return `${x},${y}`; }
+
+    function spawnFood() {
+      let pos;
+      do {
+        pos = { x: Math.floor(Math.random() * cols), y: Math.floor(Math.random() * rows) };
+      } while (
+        snake.some(s => s.x === pos.x && s.y === pos.y) ||
+        walls.has(key(pos.x, pos.y))
+      );
+      food = pos;
+    }
+
+    function tick() {
+      dir = { ...nextDir };
+
+      // Wrap around (Nokia style)
+      let nx = (snake[0].x + dir.x + cols) % cols;
+      let ny = (snake[0].y + dir.y + rows) % rows;
+      const head = { x: nx, y: ny };
+
+      // Wall collision
+      if (walls.has(key(head.x, head.y))) return gameOver();
+      // Self collision
+      if (snake.some(s => s.x === head.x && s.y === head.y)) return gameOver();
+
+      snake.unshift(head);
+
+      if (head.x === food.x && head.y === food.y) {
+        score++;
+        scoreEl.textContent = 'SCORE: ' + score;
+        spawnFood();
+      } else {
+        snake.pop();
+      }
+
+      draw();
+    }
+
+    function draw() {
+      if (!food || !snake) return;
+
+      ctx.fillStyle = '#16213e';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Grid
+      ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+      ctx.lineWidth = 1;
+      for (let x = 0; x <= cols; x++) {
+        ctx.beginPath(); ctx.moveTo(x * CELL, 0); ctx.lineTo(x * CELL, canvas.height); ctx.stroke();
+      }
+      for (let y = 0; y <= rows; y++) {
+        ctx.beginPath(); ctx.moveTo(0, y * CELL); ctx.lineTo(canvas.width, y * CELL); ctx.stroke();
+      }
+
+      // Walls
+      walls.forEach(k => {
+        const [wx, wy] = k.split(',').map(Number);
+        ctx.fillStyle = '#2a3a6e';
+        roundRect(wx * CELL + 1, wy * CELL + 1, CELL - 2, CELL - 2, 2);
+      });
+
+      // Food
+      ctx.fillStyle = '#ff6b6b';
+      ctx.shadowColor = '#ff6b6b';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(food.x * CELL + CELL / 2, food.y * CELL + CELL / 2, CELL / 2 - 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Snake
+      snake.forEach((seg, i) => {
+        const ratio = i / snake.length;
+        if (i === 0) {
+          ctx.fillStyle = '#4ecca3';
+          ctx.shadowColor = '#4ecca3';
+          ctx.shadowBlur = 8;
+        } else {
+          ctx.fillStyle = `hsl(162, 60%, ${45 - ratio * 20}%)`;
+          ctx.shadowBlur = 0;
+        }
+        const pad = i === 0 ? 1 : 2;
+        roundRect(seg.x * CELL + pad, seg.y * CELL + pad, CELL - pad * 2, CELL - pad * 2, i === 0 ? 5 : 4);
+      });
+      ctx.shadowBlur = 0;
+    }
+
+    function roundRect(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function togglePause() {
+      if (!running) return;
+      paused = !paused;
+      if (paused) {
+        clearInterval(gameLoop);
+        pauseBtn.textContent = '▶';
+        document.getElementById('pauseScore').textContent = 'SCORE: ' + score;
+        pauseScreen.classList.remove('hidden');
+      } else {
+        pauseScreen.classList.add('hidden');
+        pauseBtn.textContent = '⏸';
+        gameLoop = setInterval(tick, 130);
+      }
+    }
+
+    function gameOver() {
+      clearInterval(gameLoop);
+      running = false;
+      pauseBtn.classList.remove('visible');
+      document.getElementById('goScore').textContent = score;
+      document.getElementById('goMap').textContent = MAPS[currentMap].name.toUpperCase() + ' MAP';
+      gameoverScreen.classList.remove('hidden');
+    }
+
+    // ── SWIPE ────────────────────────────────────────────────────────
+    let touchStart = null;
+    const MIN_SWIPE = 20;
+
+    document.addEventListener('touchstart', e => {
+      if (e.target.closest('button')) return;
+      e.preventDefault();
+      touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }, { passive: false });
+
+    document.addEventListener('touchend', e => {
+      if (!touchStart) return;
+      const dx = e.changedTouches[0].clientX - touchStart.x;
+      const dy = e.changedTouches[0].clientY - touchStart.y;
+      const absDx = Math.abs(dx), absDy = Math.abs(dy);
+      touchStart = null;
+      if (Math.max(absDx, absDy) < MIN_SWIPE) return;
+      if (!running || paused) return;
+      if (absDx > absDy) {
+        if (dx > 0 && dir.x !== -1) nextDir = { x: 1, y: 0 };
+        else if (dx < 0 && dir.x !== 1) nextDir = { x: -1, y: 0 };
+      } else {
+        if (dy > 0 && dir.y !== -1) nextDir = { x: 0, y: 1 };
+        else if (dy < 0 && dir.y !== 1) nextDir = { x: 0, y: -1 };
+      }
+    }, { passive: true });
+
+    // Keyboard support
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' || e.key === 'p') { togglePause(); return; }
+      if (!running || paused) return;
+      const map = { ArrowRight:{x:1,y:0}, ArrowLeft:{x:-1,y:0}, ArrowDown:{x:0,y:1}, ArrowUp:{x:0,y:-1} };
+      const d = map[e.key];
+      if (d && (d.x !== -dir.x || d.y !== -dir.y)) nextDir = d;
+    });
+
+    // ── BUTTON WIRING ────────────────────────────────────────────────
+    document.getElementById('playBtn').addEventListener('click', () => startGame(selectedMap));
+    document.getElementById('pauseBtn').addEventListener('click', togglePause);
+    document.getElementById('resumeBtn').addEventListener('click', togglePause);
+    document.getElementById('quitBtn').addEventListener('click', () => {
+      clearInterval(gameLoop);
+      running = false;
+      paused = false;
+      pauseBtn.classList.remove('visible');
+      pauseScreen.classList.add('hidden');
+      menuScreen.classList.remove('hidden');
+    });
+    document.getElementById('retryBtn').addEventListener('click', () => startGame(currentMap));
+    document.getElementById('menuBtn').addEventListener('click', () => {
+      gameoverScreen.classList.add('hidden');
+      menuScreen.classList.remove('hidden');
+    });
+
+    // Map card selection
+    document.querySelectorAll('.map-card').forEach(card => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.map-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        selectedMap = card.dataset.map;
+      });
+    });
+
+    window.addEventListener('resize', resize);
+    resize();
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>
